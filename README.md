@@ -1,16 +1,8 @@
 ## Advanced Lane Finding
-[![Udacity - Self-Driving Car NanoDegree](https://s3.amazonaws.com/udacity-sdc/github/shield-carnd.svg)](http://www.udacity.com/drive)
+
+In this project, my goal is to write a software pipeline to identify the lane boundaries in a video. 
 
 
-In this project, your goal is to write a software pipeline to identify the lane boundaries in a video, but the main output or product we want you to create is a detailed writeup of the project.  Check out the [writeup template](https://github.com/udacity/CarND-Advanced-Lane-Lines/blob/master/writeup_template.md) for this project and use it as a starting point for creating your own writeup.  
-
-Creating a great writeup:
----
-A great writeup should include the rubric points as well as your description of how you addressed each point.  You should include a detailed description of the code used in each step (with line-number references and code snippets where necessary), and links to other supporting documents or external references.  You should include images in your writeup to demonstrate how your code works with examples.  
-
-All that said, please be concise!  We're not looking for you to write a book here, just a brief description of how you passed each rubric point, and references to the relevant code :). 
-
-You're not required to use markdown for your writeup.  If you use another method please just submit a pdf of your writeup.
 
 The Project
 ---
@@ -26,14 +18,115 @@ The goals / steps of this project are the following:
 * Warp the detected lane boundaries back onto the original image.
 * Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.
 
-The images for camera calibration are stored in the folder called `camera_cal`.  The images in `test_images` are for testing your pipeline on single frames.  If you want to extract more test images from the videos, you can simply use an image writing method like `cv2.imwrite()`, i.e., you can read the video in frame by frame as usual, and for frames you want to save for later you can write to an image file.  
+[//]: # (Image References)
 
-To help the reviewer examine your work, please save examples of the output from each stage of your pipeline in the folder called `output_images`, and include a description in your writeup for the project of what each image shows.    The video called `project_video.mp4` is the video your pipeline should work well on.  
+[image1]: ./output_images/CameraCalibration.png "Undistorted"
+[image2]: ./test_images/test2.jpg "Road Transformed"
+[image3]: ./output_images/Color_Gradient_Threshold.png "Binary Example"
+[image4]: ./output_images/warped_straight_line.png "Warp Example"
+[image5]: ./output_images/Identify_laneline_pixels_polyfit.png "Fit Visual"
+[image6]: ./output_images/result_plotted_ontheroad.png "Output"
+[video1]: ./project_video_output.mp4 "Video"
 
-The `challenge_video.mp4` video is an extra (and optional) challenge for you if you want to test your pipeline under somewhat trickier conditions.  The `harder_challenge.mp4` video is another optional challenge and is brutal!
 
-If you're feeling ambitious (again, totally optional though), don't stop there!  We encourage you to go out and take video of your own, calibrate your camera and show us how you would implement this project from scratch!
+### Camera Calibration
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+The code for this step is contained in the first code cell of the IPython notebook located in "P2.ipynb" 
 
+I start by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the world. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Thus, `objp` is just a replicated array of coordinates, and `objpoints` will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  `imgpoints` will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection.  
+
+I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()` function and obtained this result: 
+
+![alt text][image1]
+
+### Pipeline (single images)
+
+#### 1. Original image
+
+To demonstrate this step, I will describe how I apply the distortion correction to one of the test images like this one:
+![alt text][image2]
+
+#### 2. Utilization of distortion correction, color transforms, and gradients to create a thresholded binary image
+
+I used a combination of color and gradient thresholds to generate a binary image based on S and L channel from HLS value.
+From my standpoint, S channel works a fairly robust job of picking up the lines under very different color and contrast conditions. However, I also discovered this S channel might give us improper filtering when there is shadow on the road. Shadow also has really high S channel value, so I need to adjust threshold to avoid this problem. Also, I used SobelX on L channel, which was proper here because L channel represent lightness. Here's an example of my output for this step.  
+
+![alt text][image3]
+
+#### 3. Perspective transform
+
+The code for my perspective transform includes a function called `warp()`. I made every title for all the functions above corresponding function, so reviewer can easily recognize what function is now doing.  The `warp()` function takes as inputs an image (`img`).  I chose the hardcode the source and destination points in the following manner:
+
+```python
+left_bottom = [202, img.shape[0]]
+left_top = [595, 450]
+right_top = [685, 450]
+right_bottom = [1100, img.shape[0]]
+
+src = np.float32([left_bottom, left_top, right_top, right_bottom])
+dst = np.float32([[320,img.shape[0]], [320, 0], [960, 0],[960, img.shape[0]]])
+```
+
+This resulted in the following source and destination points:
+
+| Source        | Destination   | 
+|:-------------:|:-------------:| 
+| 202, 720      | 320, 720      | 
+| 595, 450      | 320, 0        |
+| 685, 450      | 960, 0        |
+| 1100, 720     | 960, 720      |
+
+I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image.
+
+![alt text][image4]
+
+#### 4. Identification of lane-line pixels and fitting their positions with a polynomial
+
+Firstly, I did implement sliding windows and fit a polynomial for the first frame. Afterwards, if the first fitted polynomial was reasonable, I just search in a margin around previous line position. Therefore, it will be based on the first frame if we are on the second frame. Later on, it will search around fitted line position based on previous frame.
+
+![alt text][image5]
+
+#### 5. Calculation of the radius of curvature of the lane and the position of the vehicle with respect to center
+
+I did this in 'Calculation of the radius of curvature of the lane and the position of the vehicle with respect to center' in my code in  `P2.ipynb`.
+I applied below code to calculate the radius of curvature. I assumed meter per pixel based on the lesson, and did polyfit for each left and right lane.
+Curvature is calculated at the bottom of the image.
+```python
+ym_per_pix = 30/720
+xm_per_pix = 3.7/700
+left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
+left_curve_rad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+right_curve_rad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+```
+Also,we are assuming car is  at center of x-axis. Based on fitted left and right polynomials,I calculated pixel values for left and right lane at the bottom, which is used for getting position for lane center. Afterwards, I applied meter per pixel to get deviation of the midpoint of the lane from the center of the image. 
+```python
+car_position = binary_warped.shape[1]/2
+l_fit_x_int = l_fit[0]*binary_warped.shape[0]**2 + l_fit[1]*binary_warped.shape[0] + l_fit[2]
+r_fit_x_int = r_fit[0]*binary_warped.shape[0]**2 + r_fit[1]*binary_warped.shape[0] + r_fit[2]
+lane_center_position = (r_fit_x_int + l_fit_x_int) /2
+center_dist = (car_position - lane_center_position) * xm_per_pix
+```
+
+#### 6. The identified lane area plotted back down onto the road
+
+I implemented this step based on function in my code called `draw_lane()`, and `draw_data()`.  Here is an example of my result on a test image:
+
+![alt text][image6]
+
+---
+
+### Pipeline (video)
+
+#### Image pipeline application to test video
+
+Here's a [link to my video result](./project_video_output.mp4)
+
+---
+
+### Discussion
+
+I think most significant part in this project is how accurate we can detect left and right lanes regardless of surrounding condition. If the thresholded binary image is considerably accurate, everything beyond lane detection will work well unless there is no mistake.
+However, this creating binary image is still not that intuitive for me even though I tried many different color space and gradient...
+I utilized S channel and L channel for this, but I realized that this combination is not perfect for all the conditions we might face.
+I can see my approach will not work if lane is really blur, or there is snowing or raining.  I think I will really need to focus on this lane detection part if I need to go further. If lane detection is working really well, curve fitting and others become reall reliable.
